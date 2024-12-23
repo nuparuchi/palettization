@@ -20,23 +20,21 @@ def isRGB(code):
 def colorDiff(c1, c2):
     return abs(c1[0] - c2[0]) + abs(c1[1] - c2[1]) + abs(c1[2] - c2[2])
 
-
-#find average of two colors
-#weight is the value of the first color out of 1
-#default is 0.5 for an even mix
-#probably shouldnt use weights >1 or <0
-def avgColor(c1, c2, weight=0.5):
-    weight2 = 1 - weight
+#get average value of colors
+#weight is relative amount of first color
+#out of 1
+#probably don't do weights outside of 0-1
+def colorAvg(c1, c2, weight=0.5):
+    weight2 = 1-weight
     newR = c1[0]*weight + c2[0]*weight2
     newG = c1[1]*weight + c2[1]*weight2
     newB = c1[2]*weight + c2[2]*weight2
     return (newR, newG, newB)
 
-
 def main(image, args):
     #read args
     colors = []
-    
+
     for arg in args:
         #see if it's a text document
         if arg[-4:] == ".txt":
@@ -72,43 +70,54 @@ def main(image, args):
     #oh and turn these hexcodes into rgb
     rgbColors = []
     for hex in colors:
-       rgbColors.append(tuple(int(hex[i:i+2], 16) for i in (0, 2, 4)))
+        rgbColors.append(tuple(int(hex[i:i+2], 16) for i in (0, 2, 4)))
        
-    #print(rgbColors)
-    #populate two & four dithered color lists
-    #2 dithered means 1 then 1 repeat
-    #4 dithered means 1 then 3 repeat
+    #we've got colors, now introduce dithering options
+    #we're going to populate a list of dithered color pairs
+    #as well as calculate what those'll be in terms of averages
+    #for 2-dithered and either way for 4-dithered
     dithered = []
-       
-    threshold = 0.5
-    threshVal = threshold * (255*3) #only include pairs that are
-    #similar enough (ie not a big difference between them determined)
-    #as well as different enough (big enough difference between them)
-    #by the threshold value
+    ditheredAvg = []
+
+    weights = [0.5, 0.75, 0.25]
+
+    #introduce a threshold
+    #so we only dither with colors far enough apart but not too far apart
+    upperThreshold = 0.3
+    lowerThreshold = 0.1
+
+    upThresholdVal  = upperThreshold * (255*3)
+    lowThresholdVal = lowerThreshold * (255*3)
+
+    #for each color
     for i in range(len(rgbColors)):
-       for j in range(len(rgbColors)-i):
-          #j+i because we want the last ones
-          ditherDiff = colorDiff(rgbColors[i], rgbColors[j+i])
-          if ditherDiff < threshVal:
-              dithered.append((rgbColors[i], rgbColors[j+i]))
+        #and all successive colors
+        #(ie all pairs without respect to order and no repeats)
+        for j in range(len(rgbColors)-i-1):
+            #check that this pair is within the thresholds
+            ditherDiff = colorDiff(rgbColors[i], rgbColors[i+j+1])
+            #if it is...
+            if ditherDiff < upThresholdVal and ditherDiff > lowThresholdVal:
+                #...put it in the list of potential ditherings
+                #and also include the average colors of those ditherings
+                dithered.append((rgbColors[i], rgbColors[i+j+1]))
+                ditheredAvg.append(tuple(colorAvg(rgbColors[i], rgbColors[i+j+1], weight) for weight in weights))
     
     #iterate over pixels
     width, height = im.size
 
-    #currently only looking at the exact pixels
-    #should add a way to consider dithering too
+    #0 -> no dithering
+    #1 -> two-dithered
+    #2 -> four-dithered, first color
+    #3 -> four-dithered, second color
+    ditherVal = 0
+
     for x in range(width):
         for y in range(height):
             r,g,b = im.getpixel((x,y))
 
             closest = 0
             closeAmount = colorDiff((r,g,b), rgbColors[0])
-
-            #0: no dither
-            #1: two-dither
-            #2: four-dither favoring first
-            #3: four-dither favoring latter
-            ditherVal = 0
             
             for i in range(1, len(rgbColors)):
                 thisDiff = colorDiff((r,g,b), rgbColors[i])
@@ -117,54 +126,42 @@ def main(image, args):
                     closest = i
                     ditherVal = 0
 
-            #do the same check but for dithered options
-            weights = [0.5, 0.75, 0.25]
-            
-            for d in range(len(dithered)):
-                #do once for equal, once for either
-                #four-dithering
-                for weight in weights:
-                    mix = avgColor(dithered[d][0], dithered[d][1], weight)
-                    thisDiff = colorDiff((r,g,b), mix)
+            #now do the same for dithered options
+            for i in range(len(dithered)):
+                for w in range(len(weights)):
+                    thisDiff = colorDiff((r,g,b), ditheredAvg[i][w])
                     if thisDiff < closeAmount:
                         closeAmount = thisDiff
-                        closest = d + len(rgbColors)
-                        if weight == 0.5:
-                            ditherVal = 1
-                        elif weight == 0.72:
-                            ditherVal = 2
-                        else:
-                            ditherVal = 3
+                        closest = i + len(rgbColors)
+                        ditherVal = w + 1
+               
 
-            if closest < len(rgbColors):
-                chosen = rgbColors[closest]
+            if ditherVal == 0:
+                out.putpixel((x,y), rgbColors[closest])
 
             else:
-                #we're in dither territory
-                #we're looking at dithere[closest - len(rgbColors)]
-                #and then either the [0] or [1] of that
-                if ditherVal < 3: #favoring first color or equal
+                #gives 2 for two-dithering,
+                #and 4 for four-dithering
+                ditherAmount = min(ditherVal, 2)*2
+
+                if ditherVal < 3:
                     mainCol = dithered[closest - len(rgbColors)][0]
-                    secondCol = dithered[closest - len(rgbColors)][1]
+                    secCol  = dithered[closest - len(rgbColors)][1]
                 else:
                     mainCol = dithered[closest - len(rgbColors)][1]
-                    secondCol = dithered[closest - len(rgbColors)][0]
+                    secCol  = dithered[closest - len(rgbColors)][0]
 
-                #choose main unless we hit the 1/2 for two-dithering
-                #or 1/4 for four-dithering
-                ditherAmount = min(ditherVal,2)*2
-                #gives 2 if two-dithering, 4 if four-dithering
-                if (x + (y*(ditherAmount/2)))% ditherAmount == 0:
-                    #we hit the secondary color
-                    chosen = secondCol
-                else: #we hit the main color
-                    chosen = mainCol
-                    
-            
-            out.putpixel((x,y), chosen)
+                if (x+(y*ditherAmount/2))%ditherAmount == 0:
+                    out.putpixel((x,y), secCol)
+                else:
+                    out.putpixel((x,y), mainCol)
+                
 
     newName = image[:-4] + "-palettize" + image[-4:]
     out.save(newName)
+
+    return True
+
 
 #feed main the image path & the args
 main(sys.argv[1], sys.argv[2:])

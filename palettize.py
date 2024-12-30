@@ -44,12 +44,12 @@ def main(image, args):
                 with open(file, 'r') as file:
                     for line in file:
                         for word in line.split():
-                            if isRGB(word):
+                            if isRGB(word) and not word.upper() in colors:
                                 colors.append(word.upper())
 
         #see if it's an rgb code
         else:
-            if isRGB(arg):
+            if isRGB(arg) and not arg.upper() in colors:
                 colors.append(arg.upper())
 
     #check that we have any colors at all
@@ -71,6 +71,9 @@ def main(image, args):
     rgbColors = []
     for hex in colors:
         rgbColors.append(tuple(int(hex[i:i+2], 16) for i in (0, 2, 4)))
+
+    #also make a gigundous array. maybe too big
+    held = {}#[[[[-1] * 2] * 256] * 256] * 256
        
     #we've got colors, now introduce dithering options
     #we're going to populate a list of dithered color pairs
@@ -116,25 +119,37 @@ def main(image, args):
         for y in range(height):
             r,g,b = im.getpixel((x,y))
 
-            closest = 0
-            closeAmount = colorDiff((r,g,b), rgbColors[0])
-            
-            for i in range(1, len(rgbColors)):
-                thisDiff = colorDiff((r,g,b), rgbColors[i])
-                if thisDiff < closeAmount:
-                    closeAmount = thisDiff
-                    closest = i
-                    ditherVal = 0
+            #get rgb as key for our dict of calculated values
+            newKey = (r,g,b)
 
-            #now do the same for dithered options
-            for i in range(len(dithered)):
-                for w in range(len(weights)):
-                    thisDiff = colorDiff((r,g,b), ditheredAvg[i][w])
+            #if we have not yet calculated the closest color,
+            #calculate it
+            if not newKey in held.keys():
+                closest = 0
+                closeAmount = colorDiff((r,g,b), rgbColors[0])
+            
+                for i in range(1, len(rgbColors)):
+                    thisDiff = colorDiff((r,g,b), rgbColors[i])
                     if thisDiff < closeAmount:
                         closeAmount = thisDiff
-                        closest = i + len(rgbColors)
-                        ditherVal = w + 1
-               
+                        closest = i
+                        ditherVal = 0
+
+                #now do the same for dithered options
+                for i in range(len(dithered)):
+                    for w in range(len(weights)):
+                        thisDiff = colorDiff((r,g,b), ditheredAvg[i][w])
+                        if thisDiff < closeAmount:
+                            closeAmount = thisDiff
+                            closest = i + len(rgbColors)
+                            ditherVal = w + 1
+                #and save what we calculated in our dict
+                held.update({newKey : (closest, ditherVal)})
+
+            #otherwise simply get the value from the dict
+            else:
+                closest,ditherVal = held[newKey]
+                
 
             if ditherVal == 0:
                 out.putpixel((x,y), rgbColors[closest])
@@ -157,6 +172,8 @@ def main(image, args):
                     out.putpixel((x,y), mainCol)
                 
 
+    #add "-palettize" to the name before .png or .jpg
+    #should probably break at the final '.' and use that
     newName = image[:-4] + "-palettize" + image[-4:]
     out.save(newName)
 

@@ -1,0 +1,4 @@
+# ignore all (accepted) images and palettes
+*.png
+*.jpg
+*.pal

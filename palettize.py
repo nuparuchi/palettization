@@ -1,6 +1,7 @@
 from PIL import Image
 import sys
 from pathlib import Path
+import pickle
 
 #checks if a string is 6 characters and
 #numbers 0-9 and letters A-F
@@ -31,11 +32,40 @@ def colorAvg(c1, c2, weight=0.5):
     newB = c1[2]*weight + c2[2]*weight2
     return (newR, newG, newB)
 
+#load the colors and dict of color mappings
+#from a given file
+def loadPalette(file):
+    with open(file, 'rb') as f:
+        held = pickle.load(f)
+    colors = held.pop(0)
+    
+    return colors, held
+
 def main(image, args):
     #read args
     colors = []
 
+    #make a dict to remember what color/dithering gets mapped
+    #to each color of pixel
+    held = {}
+
+    #store name of palette if it does not currently exist
+    palName = ""
+
     for arg in args:
+        #see if it's a palette
+        if arg[-4:] == ".pal":
+            file = Path(arg)
+            if file.is_file():
+                #file exists, load palette
+                #we need both the colors from the palette and the dict from the palette
+                colors, held = loadPalette(file)
+                break
+            else:
+                #if the palette does not currently exist, use that as the name
+                #for a new palette
+                palName = arg
+        
         #see if it's a text document
         if arg[-4:] == ".txt":
             file = Path(arg)
@@ -46,7 +76,7 @@ def main(image, args):
                         for word in line.split():
                             if isRGB(word) and not word.upper() in colors:
                                 colors.append(word.upper())
-
+        
         #see if it's an rgb code
         else:
             if isRGB(arg) and not arg.upper() in colors:
@@ -71,9 +101,6 @@ def main(image, args):
     rgbColors = []
     for hex in colors:
         rgbColors.append(tuple(int(hex[i:i+2], 16) for i in (0, 2, 4)))
-
-    #also make a gigundous array. maybe too big
-    held = {}#[[[[-1] * 2] * 256] * 256] * 256
        
     #we've got colors, now introduce dithering options
     #we're going to populate a list of dithered color pairs
@@ -176,6 +203,12 @@ def main(image, args):
     #should probably break at the final '.' and use that
     newName = image[:-4] + "-palettize" + image[-4:]
     out.save(newName)
+
+    if (palName != ""): #some palName exists
+        #save the palette under that name
+        held.update({0 : colors})
+        with open(palName, 'wb') as f:
+            pickle.dump(held, f)
 
     return True
 

@@ -114,7 +114,7 @@ def main(image, args):
     #introduce a threshold
     #so we only dither with colors far enough apart but not too far apart
     upperThreshold = 0.3
-    lowerThreshold = 0.1
+    lowerThreshold = 0.15
 
     upThresholdVal  = upperThreshold * (255*3)
     lowThresholdVal = lowerThreshold * (255*3)
@@ -168,8 +168,9 @@ def main(image, args):
                         thisDiff = colorDiff((r,g,b), ditheredAvg[i][w])
                         if thisDiff < closeAmount:
                             closeAmount = thisDiff
-                            closest = i + len(rgbColors)
+                            closest = i
                             ditherVal = w + 1
+                                
                 #and save what we calculated in our dict
                 held.update({newKey : (closest, ditherVal)})
 
@@ -187,11 +188,11 @@ def main(image, args):
                 ditherAmount = min(ditherVal, 2)*2
 
                 if ditherVal < 3:
-                    mainCol = dithered[closest - len(rgbColors)][0]
-                    secCol  = dithered[closest - len(rgbColors)][1]
+                    mainCol = dithered[closest][0]
+                    secCol  = dithered[closest][1]
                 else:
-                    mainCol = dithered[closest - len(rgbColors)][1]
-                    secCol  = dithered[closest - len(rgbColors)][0]
+                    mainCol = dithered[closest][1]
+                    secCol  = dithered[closest][0]
 
                 if (x+(y*ditherAmount/2))%ditherAmount == 0:
                     out.putpixel((x,y), secCol)

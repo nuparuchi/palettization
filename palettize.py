@@ -38,12 +38,16 @@ def loadPalette(file):
     with open(file, 'rb') as f:
         held = pickle.load(f)
     colors = held.pop(0)
+    settings = held.pop(1, [])
     
-    return colors, held
+    return colors, settings, held
 
 def main(image, args):
     #read args
     colors = []
+    settings = [0] #each setting gets a value here
+                   #the first (and currently only) is dithering
+                   #1 means the images are by default dithered
 
     #make a dict to remember what color/dithering gets mapped
     #to each color of pixel
@@ -55,32 +59,48 @@ def main(image, args):
     for arg in args:
         #see if it's a palette
         if arg[-4:] == ".pal":
+            #store the palName
+            #so we can update/create the palette when we're done
+            palName = arg
             file = Path(arg)
             if file.is_file():
                 #file exists, load palette
-                #we need both the colors from the palette and the dict from the palette
-                colors, held = loadPalette(file)
-                break
-            else:
-                #if the palette does not currently exist, use that as the name
-                #for a new palette
-                palName = arg
+                #we need the colors, the dict, and the settings from the palette
+                colors, tempSettings, held = loadPalette(file)
+                for i in range(len(tempSettings)):
+                    settings[i] = tempSettings[i]
+                    #go through tempSettings and set settings from that
+                    #this makes it so when we add settings in the future,
+                    #old palettes will just use the default values of those
+                    #settings, rather than not have them set at all
         
         #see if it's a text document
         if arg[-4:] == ".txt":
-            file = Path(arg)
-            if file.is_file():
-                #file exists, read colors from it
-                with open(file, 'r') as file:
-                    for line in file:
-                        for word in line.split():
-                            if isRGB(word) and not word.upper() in colors:
-                                colors.append(word.upper())
+            if palName == '' or not Path(palName).is_file():
+            #only read colors if we don't already have a palette
+                file = Path(arg)
+                if file.is_file():
+                    #file exists, read colors from it
+                    with open(file, 'r') as file:
+                        for line in file:
+                            for word in line.split():
+                                if isRGB(word) and not word.upper() in colors:
+                                    colors.append(word.upper())
+
+        #see if it's a setting
+        if arg[0] == '-':
+            if palName == '' or not Path(palName).is_file():
+            #only read settings if we don't already have a palette
+                match arg:
+                    case "-nodither":
+                        settings[0] = 0
         
         #see if it's an rgb code
         else:
-            if isRGB(arg) and not arg.upper() in colors:
-                colors.append(arg.upper())
+            if palName == '' or not Path(palName).is_file():
+                #only read color if we don't already have a palette
+                if isRGB(arg) and not arg.upper() in colors:
+                    colors.append(arg.upper())
 
     #check that we have any colors at all
                 
@@ -90,6 +110,12 @@ def main(image, args):
     if len(colors) == 0:
         print("No colors provided.")
         return False
+
+    #tell user about settings
+    if settings[0]:
+        print("Dithering on")
+    else:
+        print("Dithering off")
     
 
     #palettize
@@ -120,18 +146,19 @@ def main(image, args):
     lowThresholdVal = lowerThreshold * (255*3)
 
     #for each color
-    for i in range(len(rgbColors)):
-        #and all successive colors
-        #(ie all pairs without respect to order and no repeats)
-        for j in range(len(rgbColors)-i-1):
-            #check that this pair is within the thresholds
-            ditherDiff = colorDiff(rgbColors[i], rgbColors[i+j+1])
-            #if it is...
-            if ditherDiff < upThresholdVal and ditherDiff > lowThresholdVal:
-                #...put it in the list of potential ditherings
-                #and also include the average colors of those ditherings
-                dithered.append((rgbColors[i], rgbColors[i+j+1]))
-                ditheredAvg.append(tuple(colorAvg(rgbColors[i], rgbColors[i+j+1], weight) for weight in weights))
+    if settings[0]:
+        for i in range(len(rgbColors)):
+            #and all successive colors
+            #(ie all pairs without respect to order and no repeats)
+            for j in range(len(rgbColors)-i-1):
+                #check that this pair is within the thresholds
+                ditherDiff = colorDiff(rgbColors[i], rgbColors[i+j+1])
+                #if it is...
+                if ditherDiff < upThresholdVal and ditherDiff > lowThresholdVal:
+                    #...put it in the list of potential ditherings
+                    #and also include the average colors of those ditherings
+                    dithered.append((rgbColors[i], rgbColors[i+j+1]))
+                    ditheredAvg.append(tuple(colorAvg(rgbColors[i], rgbColors[i+j+1], weight) for weight in weights))
     
     #iterate over pixels
     width, height = im.size
@@ -208,6 +235,7 @@ def main(image, args):
     if (palName != ""): #some palName exists
         #save the palette under that name
         held.update({0 : colors})
+        held.update({1 : settings})
         with open(palName, 'wb') as f:
             pickle.dump(held, f)
 

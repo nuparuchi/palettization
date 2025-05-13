@@ -45,9 +45,15 @@ def loadPalette(file):
 def main(image, args):
     #read args
     colors = []
-    settings = [0] #each setting gets a value here
-                   #the first (and currently only) is dithering
-                   #1 means the images are by default dithered
+    settings = [1,1] #each setting gets a value here
+                     #the first setting is dithering
+                     #1 means the images are by default dithered
+    
+                     #the second setting is how much the image is compressed
+                     #1 means no compression, any higher integer means
+                     #that many pixels in a square are combined together
+                     #so 2 would mean the image takes 2x2 squares of pixels
+                     #instead of individual pixels
 
     #make a dict to remember what color/dithering gets mapped
     #to each color of pixel
@@ -94,6 +100,8 @@ def main(image, args):
                 match arg:
                     case "-nodither":
                         settings[0] = 0
+                if arg[1:].isnumeric():
+                    settings[1] = int(arg[1:])
         
         #see if it's an rgb code
         else:
@@ -116,12 +124,19 @@ def main(image, args):
         print("Dithering on")
     else:
         print("Dithering off")
+
+    if not settings[1] == 1:
+        print("Shrinking each dimension by a factor of " + str(settings[1]))
     
 
     #palettize
     im = Image.open(image)
 
-    out = Image.new('RGB', im.size)
+    origWidth, origHeight = im.size
+    width = origWidth//settings[1]
+    height = origHeight//settings[1]
+
+    out = Image.new('RGB', (width, height))
 
     #oh and turn these hexcodes into rgb
     rgbColors = []
@@ -159,9 +174,9 @@ def main(image, args):
                     #and also include the average colors of those ditherings
                     dithered.append((rgbColors[i], rgbColors[i+j+1]))
                     ditheredAvg.append(tuple(colorAvg(rgbColors[i], rgbColors[i+j+1], weight) for weight in weights))
+
     
     #iterate over pixels
-    width, height = im.size
 
     #0 -> no dithering
     #1 -> two-dithered
@@ -171,7 +186,17 @@ def main(image, args):
 
     for x in range(width):
         for y in range(height):
-            r,g,b = im.getpixel((x,y))
+            r,g,b = (0,0,0)
+            for i in range(settings[1]):
+                for j in range(settings[1]):
+                    tempR,tempG,tempB = im.getpixel(((x*settings[1])+i,(y*settings[1])+j))
+                    r += tempR
+                    g += tempG
+                    b += tempB
+
+            r = r // settings[1]
+            g = g // settings[1]
+            b = b // settings[1]
 
             #get rgb as key for our dict of calculated values
             newKey = (r,g,b)

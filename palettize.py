@@ -2,24 +2,42 @@ from PIL import Image
 import sys
 from pathlib import Path
 import pickle
+import math
 
 #checks if a string is 6 characters and
 #numbers 0-9 and letters A-F
 def isRGB(code):
-    if len(code) == 6:
+    if len(code) == 6 or len(code) == 7:
+        thisCode = code
+        if len(code) == 7:
+            if code[0] == '#':
+                thisCode = code[1:]
         #47-58 are digits
         #65-70 are A-F
-        for c in code.upper():
+        for c in thisCode.upper():
             n = ord(c)
             if not((n>=47 and n<=58) or (n>=65 and n<=70)):
                 return False
         return True
+    return False
 
+#use whichever color difference algorithm we're using
+def colorDiff(c1, c2, diffType):
+   match diffType:
+       case 0:
+           return taxicabDiff(c1, c2)
+       case 1:
+           return euclidDiff(c1, c2)
 
 #finds the sum of the differences of two colors
 #which're here represented as tuples
-def colorDiff(c1, c2):
+def taxicabDiff(c1, c2):
     return abs(c1[0] - c2[0]) + abs(c1[1] - c2[1]) + abs(c1[2] - c2[2])
+
+#finds the euclidian distance of two colors
+#which're here represented as tuples
+def euclidDiff(c1, c2):
+    return math.sqrt(((c1[0] - c2[0])**2) + ((c1[1] - c2[1])**2) + ((c1[2] - c2[2])**2))
 
 #get average value of colors
 #weight is relative amount of first color
@@ -45,15 +63,19 @@ def loadPalette(file):
 def main(image, args):
     #read args
     colors = []
-    settings = [1,1] #each setting gets a value here
-                     #the first setting is dithering
-                     #1 means the images are by default dithered
+    settings = [1,1,0] #each setting gets a value here
+                       #the first setting is dithering
+                       #1 means the images are by default dithered
     
-                     #the second setting is how much the image is compressed
-                     #1 means no compression, any higher integer means
-                     #that many pixels in a square are combined together
-                     #so 2 would mean the image takes 2x2 squares of pixels
-                     #instead of individual pixels
+                       #the second setting is how much the image is compressed
+                       #1 means no compression, any higher integer means
+                       #that many pixels in a square are combined together
+                       #so 2 would mean the image takes 2x2 squares of pixels
+                       #instead of individual pixels
+
+                       #the third setting is how we're calculating color difference
+                       #0 is taxicab difference (default since it's fast)
+                       #1 is euclid difference
 
     #make a dict to remember what color/dithering gets mapped
     #to each color of pixel
@@ -100,6 +122,8 @@ def main(image, args):
                 match arg:
                     case "-nodither":
                         settings[0] = 0
+                    case "-euclid":
+                        settings[2] = 1
                 if arg[1:].isnumeric():
                     settings[1] = int(arg[1:])
         
@@ -127,6 +151,11 @@ def main(image, args):
 
     if not settings[1] == 1:
         print("Shrinking each dimension by a factor of " + str(settings[1]))
+
+    if settings[2] == 0:
+        print("Using taxicab distance")
+    elif settings[2] == 1:
+        print("Using euclidean distance")
     
 
     #palettize
@@ -167,7 +196,7 @@ def main(image, args):
             #(ie all pairs without respect to order and no repeats)
             for j in range(len(rgbColors)-i-1):
                 #check that this pair is within the thresholds
-                ditherDiff = colorDiff(rgbColors[i], rgbColors[i+j+1])
+                ditherDiff = colorDiff(rgbColors[i], rgbColors[i+j+1], settings[2])
                 #if it is...
                 if ditherDiff < upThresholdVal and ditherDiff > lowThresholdVal:
                     #...put it in the list of potential ditherings
@@ -205,10 +234,10 @@ def main(image, args):
             #calculate it
             if not newKey in held.keys():
                 closest = 0
-                closeAmount = colorDiff((r,g,b), rgbColors[0])
+                closeAmount = colorDiff((r,g,b), rgbColors[0], settings[2])
             
                 for i in range(1, len(rgbColors)):
-                    thisDiff = colorDiff((r,g,b), rgbColors[i])
+                    thisDiff = colorDiff((r,g,b), rgbColors[i], settings[2])
                     if thisDiff < closeAmount:
                         closeAmount = thisDiff
                         closest = i
@@ -217,7 +246,7 @@ def main(image, args):
                 #now do the same for dithered options
                 for i in range(len(dithered)):
                     for w in range(len(weights)):
-                        thisDiff = colorDiff((r,g,b), ditheredAvg[i][w])
+                        thisDiff = colorDiff((r,g,b), ditheredAvg[i][w], settings[2])
                         if thisDiff < closeAmount:
                             closeAmount = thisDiff
                             closest = i
@@ -269,12 +298,3 @@ def main(image, args):
 
 #feed main the image path & the args
 main(sys.argv[1], sys.argv[2:])
-
-
-
-
-
-
-
-
-

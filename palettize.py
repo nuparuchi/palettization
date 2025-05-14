@@ -223,9 +223,9 @@ def main(image, args):
                     g += tempG
                     b += tempB
 
-            r = r // settings[1]
-            g = g // settings[1]
-            b = b // settings[1]
+            r = r // (settings[1]**2)
+            g = g // (settings[1]**2)
+            b = b // (settings[1]**2)
 
             #get rgb as key for our dict of calculated values
             newKey = (r,g,b)

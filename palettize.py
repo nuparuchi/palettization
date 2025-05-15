@@ -2,7 +2,6 @@ from PIL import Image
 import sys
 from pathlib import Path
 import pickle
-import math
 
 #checks if a string is 6 characters and
 #numbers 0-9 and letters A-F
@@ -37,7 +36,7 @@ def taxicabDiff(c1, c2):
 #finds the euclidian distance of two colors
 #which're here represented as tuples
 def euclidDiff(c1, c2):
-    return math.sqrt(((c1[0] - c2[0])**2) + ((c1[1] - c2[1])**2) + ((c1[2] - c2[2])**2))
+    return ((c1[0] - c2[0])**2) + ((c1[1] - c2[1])**2) + ((c1[2] - c2[2])**2)
 
 #get average value of colors
 #weight is relative amount of first color
@@ -188,6 +187,13 @@ def main(image, args):
 
     upThresholdVal  = upperThreshold * (255*3)
     lowThresholdVal = lowerThreshold * (255*3)
+
+    if settings[2] == 1:
+        #if in euclidean distance, square this
+        #since we aren't square rooting the distance measure
+        #for a little bit of speed
+        upThresholdVal = upThresholdVal ** 2
+        lowThresholdVal = lowThresholdVal ** 2
 
     #for each color
     if settings[0]:

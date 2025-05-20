@@ -2,6 +2,8 @@ from PIL import Image
 import sys
 from pathlib import Path
 import pickle
+from colormath.color_conversions import convert_color
+from colormath.color_objects import sRGBColor, LabColor
 
 #checks if a string is 6 characters and
 #numbers 0-9 and letters A-F
@@ -22,11 +24,13 @@ def isRGB(code):
 
 #use whichever color difference algorithm we're using
 def colorDiff(c1, c2, diffType):
-   match diffType:
-       case 0:
-           return taxicabDiff(c1, c2)
-       case 1:
-           return euclidDiff(c1, c2)
+    match diffType:
+        case 0:
+            return taxicabDiff(c1, c2)
+        case 1:
+            return euclidDiff(c1, c2)
+        case 2:
+            return labDiff76(c1, c2)
 
 #finds the sum of the differences of two colors
 #which're here represented as tuples
@@ -37,6 +41,15 @@ def taxicabDiff(c1, c2):
 #which're here represented as tuples
 def euclidDiff(c1, c2):
     return ((c1[0] - c2[0])**2) + ((c1[1] - c2[1])**2) + ((c1[2] - c2[2])**2)
+
+def labDiff76(c1, c2):
+    rgb1 = sRGBColor(c1[0],c1[1],c1[2],True)
+    lab1 = convert_color(rgb1, LabColor).get_value_tuple()
+    
+    rgb2 = sRGBColor(c2[0],c2[1],c2[2],True)
+    lab2 = convert_color(rgb2, LabColor).get_value_tuple()
+
+    return ((lab1[0] - lab2[0])**2) + ((lab1[1] - lab2[1])**2) + ((lab1[2] - lab2[2])**2)
 
 #get average value of colors
 #weight is relative amount of first color
@@ -75,6 +88,7 @@ def main(image, args):
                        #the third setting is how we're calculating color difference
                        #0 is taxicab difference (default since it's fast)
                        #1 is euclid difference
+                       #2 is CIELAB76. basically just euclidean distance on CIELAB values
 
     #make a dict to remember what color/dithering gets mapped
     #to each color of pixel
@@ -123,6 +137,8 @@ def main(image, args):
                         settings[0] = 0
                     case "-euclid":
                         settings[2] = 1
+                    case "-cie76":
+                        settings[2] = 2
                 if arg[1:].isnumeric():
                     settings[1] = int(arg[1:])
         
@@ -155,6 +171,8 @@ def main(image, args):
         print("Using taxicab distance")
     elif settings[2] == 1:
         print("Using euclidean distance")
+    elif settings[2] == 2:
+        print("Using CIE 76 distance")
     
 
     #palettize
@@ -194,6 +212,15 @@ def main(image, args):
         #for a little bit of speed
         upThresholdVal = upThresholdVal ** 2
         lowThresholdVal = lowThresholdVal ** 2
+
+    if settings[2] == 2:
+        #if in ceilab, we care about just noticeable difference
+        #which is defined as 2.3
+        #and we'll use 4.6 as thrice that
+        #also as in the euclidean distance case we aren't squaring it
+        #so we actually care about the square of these values
+        upThresholdVal = 47.61#6.9**2
+        lowThresholdVal = 5.29#2.3**2
 
     #for each color
     if settings[0]:

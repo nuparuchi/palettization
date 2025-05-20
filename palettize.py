@@ -60,6 +60,24 @@ def loadPalette(file):
     return colors, settings, held
 
 def main(image, args):
+    fill = False
+    
+    #confirm that the image exists
+    if (image[-4:] == ".png" or image[-4:] == ".jpg"):
+        if Path(image).is_file():
+            im = Image.open(image)
+        else:
+            print("Image does not exist")
+            return False
+            
+    else:
+        if image == "fillPal":
+            fill = True
+        else:
+            print("Image does not exist")
+            return False
+    
+    
     #read args
     colors = []
     settings = [1,1,0] #each setting gets a value here
@@ -155,16 +173,6 @@ def main(image, args):
         print("Using taxicab distance")
     elif settings[2] == 1:
         print("Using euclidean distance")
-    
-
-    #palettize
-    im = Image.open(image)
-
-    origWidth, origHeight = im.size
-    width = origWidth//settings[1]
-    height = origHeight//settings[1]
-
-    out = Image.new('RGB', (width, height))
 
     #oh and turn these hexcodes into rgb
     rgbColors = []
@@ -219,78 +227,127 @@ def main(image, args):
     #3 -> four-dithered, second color
     ditherVal = 0
 
-    for x in range(width):
-        for y in range(height):
-            r,g,b = (0,0,0)
-            for i in range(settings[1]):
-                for j in range(settings[1]):
-                    tempR,tempG,tempB = im.getpixel(((x*settings[1])+i,(y*settings[1])+j))
-                    r += tempR
-                    g += tempG
-                    b += tempB
+    #palettize
+    if not fill:
+        origWidth, origHeight = im.size
+        width = origWidth//settings[1]
+        height = origHeight//settings[1]
 
-            r = r // (settings[1]**2)
-            g = g // (settings[1]**2)
-            b = b // (settings[1]**2)
+        out = Image.new('RGB', (width, height))
 
-            #get rgb as key for our dict of calculated values
-            newKey = (r,g,b)
+        for x in range(width):
+            for y in range(height):
+                r,g,b = (0,0,0)
+                for i in range(settings[1]):
+                    for j in range(settings[1]):
+                        tempR,tempG,tempB = im.getpixel(((x*settings[1])+i,(y*settings[1])+j))
+                        r += tempR
+                        g += tempG
+                        b += tempB
 
-            #if we have not yet calculated the closest color,
-            #calculate it
-            if not newKey in held.keys():
-                closest = 0
-                closeAmount = colorDiff((r,g,b), rgbColors[0], settings[2])
+                r = r // (settings[1]**2)
+                g = g // (settings[1]**2)
+                b = b // (settings[1]**2)
+
+                #get rgb as key for our dict of calculated values
+                newKey = (r,g,b)
+
+                #if we have not yet calculated the closest color,
+                #calculate it
+                if not newKey in held.keys():
+                    closest = 0
+                    closeAmount = colorDiff((r,g,b), rgbColors[0], settings[2])
             
-                for i in range(1, len(rgbColors)):
-                    thisDiff = colorDiff((r,g,b), rgbColors[i], settings[2])
-                    if thisDiff < closeAmount:
-                        closeAmount = thisDiff
-                        closest = i
-                        ditherVal = 0
-
-                #now do the same for dithered options
-                for i in range(len(dithered)):
-                    for w in range(len(weights)):
-                        thisDiff = colorDiff((r,g,b), ditheredAvg[i][w], settings[2])
+                    for i in range(1, len(rgbColors)):
+                        thisDiff = colorDiff((r,g,b), rgbColors[i], settings[2])
                         if thisDiff < closeAmount:
                             closeAmount = thisDiff
                             closest = i
-                            ditherVal = w + 1
+                            ditherVal = 0
+
+                    #now do the same for dithered options
+                    for i in range(len(dithered)):
+                        for w in range(len(weights)):
+                            thisDiff = colorDiff((r,g,b), ditheredAvg[i][w], settings[2])
+                            if thisDiff < closeAmount:
+                                closeAmount = thisDiff
+                                closest = i
+                                ditherVal = w + 1
                                 
-                #and save what we calculated in our dict
-                held.update({newKey : (closest, ditherVal)})
+                    #and save what we calculated in our dict
+                    held.update({newKey : (closest, ditherVal)})
 
-            #otherwise simply get the value from the dict
-            else:
-                closest,ditherVal = held[newKey]
+                #otherwise simply get the value from the dict
+                else:
+                    closest,ditherVal = held[newKey]
                 
 
-            if ditherVal == 0:
-                out.putpixel((x,y), rgbColors[closest])
+                if ditherVal == 0:
+                    out.putpixel((x,y), rgbColors[closest])
 
-            else:
-                #gives 2 for two-dithering,
-                #and 4 for four-dithering
-                ditherAmount = min(ditherVal, 2)*2
-
-                if ditherVal < 3:
-                    mainCol = dithered[closest][0]
-                    secCol  = dithered[closest][1]
                 else:
-                    mainCol = dithered[closest][1]
-                    secCol  = dithered[closest][0]
+                    #gives 2 for two-dithering,
+                    #and 4 for four-dithering
+                    ditherAmount = min(ditherVal, 2)*2
 
-                if (x+(y*ditherAmount/2))%ditherAmount == 0:
-                    out.putpixel((x,y), secCol)
-                else:
-                    out.putpixel((x,y), mainCol)
+                    if ditherVal < 3:
+                        mainCol = dithered[closest][0]
+                        secCol  = dithered[closest][1]
+                    else:
+                        mainCol = dithered[closest][1]
+                        secCol  = dithered[closest][0]
+
+                    if (x+(y*ditherAmount/2))%ditherAmount == 0:
+                        out.putpixel((x,y), secCol)
+                    else:
+                        out.putpixel((x,y), mainCol)
                 
 
-    #add "-palettize" to the name before .png or .jpg
-    #should probably break at the final '.' and use that
-    newName = image[:-4] + "-palettize" + image[-4:]
-    out.save(newName)
+        #add "-palettize" to the name before .png or .jpg
+        #should probably break at the final '.' and use that
+        newName = image[:-4] + "-palettize" + image[-4:]
+        out.save(newName)
+        
+    elif palName != "":
+        for x in range(256):
+            if (x + 1) % 16 == 0:
+                print(str((x+1)//16) + "/16 completed")
+            for y in range(256):
+                for z in range(256):
+                    r,g,b = (x,y,z)
+
+                    #get rgb as key for our dict of calculated values
+                    newKey = (r,g,b)
+
+                    #if we have not yet calculated the closest color,
+                    #calculate it
+                    if not newKey in held.keys():
+                        closest = 0
+                        closeAmount = colorDiff((r,g,b), rgbColors[0], settings[2])
+            
+                        for i in range(1, len(rgbColors)):
+                            thisDiff = colorDiff((r,g,b), rgbColors[i], settings[2])
+                            if thisDiff < closeAmount:
+                                closeAmount = thisDiff
+                                closest = i
+                                ditherVal = 0
+
+                        #now do the same for dithered options
+                        for i in range(len(dithered)):
+                            for w in range(len(weights)):
+                                thisDiff = colorDiff((r,g,b), ditheredAvg[i][w], settings[2])
+                                if thisDiff < closeAmount:
+                                    closeAmount = thisDiff
+                                    closest = i
+                                    ditherVal = w + 1
+                                
+                        #and save what we calculated in our dict
+                        held.update({newKey : (closest, ditherVal)})
+
+                    #otherwise simply get the value from the dict
+                    else:
+                        closest,ditherVal = held[newKey]
+                    
 
     if (palName != ""): #some palName exists
         #save the palette under that name

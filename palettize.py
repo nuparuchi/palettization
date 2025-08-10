@@ -219,7 +219,17 @@ def main(image, args):
     #3 -> four-dithered, second color
     ditherVal = 0
 
+    #for progress information
+    lastSize = 0
+    divisor = 4 #the progress is updated once every this number of rows
+
     for x in range(width):
+
+        if x % divisor == 0:
+            progressText = ('\b' * lastSize) + str(x) + "/" + str(width)
+            lastSize = len(progressText)
+            print(progressText, end='')
+            
         for y in range(height):
             r,g,b = (0,0,0)
             for i in range(settings[1]):
